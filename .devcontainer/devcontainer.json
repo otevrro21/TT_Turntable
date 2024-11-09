@@ -1,0 +1,20 @@
+{
+  "name": "otevrro21_DMP_Pico",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "pico-sdk-dev-env",
+  "workspaceFolder": "/workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscode-icons-team.vscode-icons",
+        "ms-vscode.cmake-tools",
+        "ms-vscode.cpptools-extension-pack",
+        "aaron-bond.better-comments",
+        "mhutchie.git-graph",
+        "VisualStudioExptTeam.vscodeintellicode-completions"
+      ]
+    }
+  },
+  "remoteUser": "root",
+  "shutdownAction": "stopCompose"
+}
