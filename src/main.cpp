@@ -1,3 +1,15 @@
+/*
+    DMP 2024/25 Rostislav Kaili Otevrel - Railway model turntable
+
+    Total rail positions: 9
+    Home position is denoted as -1
+    Serial commands:
+    H for homing
+    P and a number from 0 to 8 for position
+    X for alraedy at the target position
+    S for stop
+*/
+
 //* LIBRARIES: ---------------------------------------------------------------------------------
 
 #include <Arduino.h>
@@ -19,20 +31,21 @@ const int STEP = 16;
 
 //! GLOBAL VARIABLES: --------------------------------------------------------------------------
 
-const int stepsPerRevolution = 3200; // It's actually 3200 but the library is broken...
-int stepCount = 0;
+const int stepsPerRevolution = 3200; // steps per revolution of the stepper motor (200 * 16 for microstepping)
+int stepsFromHome = 0; // steps from the home position
+int currentBridgePosition = 0; // current position of the bridge (side A)
+int targetRailPosition[] = {1000, 1350, 1500, 1600, 2000, 2200, 2250, 2300, 2350}; // positions of the rails in steps from homing position
 
 //* OBJECTS: -----------------------------------------------------------------------------------
 
 
 //* FUNCTION PROTOTYPES: ----------------------------------------------------------------------
 
-void home(), test(int dir);
+void home(), moveToPosition(int targetPositionSelection), driveMotor(int stepsToTake, int direction);
 
 //* MAIN CODE: ---------------------------------------------------------------------------------
 
-void setup()
-{
+void setup() {
     Serial.begin(115200);
 
     pinMode(EN_PIN, OUTPUT);
@@ -45,26 +58,29 @@ void setup()
     pinMode(LIMIT_SW, INPUT);
 
     digitalWrite(EN_PIN, LOW);
-
 }
 
-void loop()
-{
+void loop() {
     if (Serial.available() > 0) {
-        char incomingByte = Serial.read();
-        Serial.println(incomingByte);
-        if (incomingByte == 'A' || incomingByte == 'B') {
-            test(incomingByte);
-        }
-        else
-        if (incomingByte == 'H') {
+        char command = Serial.read();
+        if (command == 'H') {
             home();
+        }
+        else if (command == 'P') {
+            // Wait for the second character
+            delay(10); // Small delay to ensure next character arrives (im so sorry)
+            if (Serial.available() > 0) {
+                char posChar = Serial.read();
+                int pos = posChar - '0';
+                if (pos >= 0 && pos < 8) {
+                    moveToPosition(pos);
+                }
+            }
         }
     }
 }
 
-void home()
-{
+void home() {
     digitalWrite(EN_PIN, HIGH);
     digitalWrite(DIR, HIGH);
     while (digitalRead(LIMIT_SW) == HIGH) {
@@ -75,23 +91,35 @@ void home()
     }
     digitalWrite(STEP, LOW);
     digitalWrite(EN_PIN, LOW);
-    stepCount = 0;
+    currentBridgePosition = -1;
+    stepsFromHome = 0;
 }
 
-void test(int dir)
-{
-    if (dir == 'A') {
-        digitalWrite(DIR, HIGH);
+void moveToPosition(int targetPositionSelection) { // logic for direction and steps to take to reach the target position
+    if (currentBridgePosition < targetPositionSelection || currentBridgePosition > targetPositionSelection) {
+        if (currentBridgePosition < targetPositionSelection) {
+            driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, LOW);
+            currentBridgePosition++;
+        }
+        else if (currentBridgePosition > targetPositionSelection) {
+            driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], HIGH);
+            currentBridgePosition--;
+        }
     }
-    else if (dir == 'B') {
-        digitalWrite(DIR, LOW);
+    else if (currentBridgePosition == targetPositionSelection) {
+        Serial.println("X"); // if the bridge is at the target position X for control panel
     }
+}
+
+void driveMotor(int stepsToTake, int direction) { // drive the motor a certain number of steps in a certain direction
     digitalWrite(EN_PIN, HIGH);
-    for (int i = 0; i < stepsPerRevolution/4; i++) {
+    digitalWrite(DIR, direction);
+    for (int i = 0; i < stepsToTake; i++) {
         digitalWrite(STEP, HIGH);
         delayMicroseconds(500);
         digitalWrite(STEP, LOW);
         delayMicroseconds(500);
+        stepsFromHome++;
     }
     digitalWrite(EN_PIN, LOW);
 }
