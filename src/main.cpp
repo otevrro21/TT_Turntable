@@ -65,14 +65,13 @@ void loop() {
         char command = Serial.read();
         if (command == 'H') {
             home();
-        }
-        else if (command == 'P') {
+        } else if (command == 'P') {
             // Wait for the second character
             delay(10); // Small delay to ensure next character arrives (im so sorry)
             if (Serial.available() > 0) {
                 char posChar = Serial.read();
                 int pos = posChar - '0';
-                if (pos >= 0 && pos < 8) {
+                if (pos >= 0 && pos <= 8) {
                     moveToPosition(pos);
                 }
             }
@@ -100,13 +99,11 @@ void moveToPosition(int targetPositionSelection) { // logic for direction and st
         if (currentBridgePosition < targetPositionSelection) {
             driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, LOW);
             currentBridgePosition++;
-        }
-        else if (currentBridgePosition > targetPositionSelection) {
+        } else if (currentBridgePosition > targetPositionSelection) {
             driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], HIGH);
             currentBridgePosition--;
         }
-    }
-    else if (currentBridgePosition == targetPositionSelection) {
+    } else if (currentBridgePosition == targetPositionSelection) {
         Serial.println("X"); // if the bridge is at the target position X for control panel
     }
 }
