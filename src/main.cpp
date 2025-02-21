@@ -10,9 +10,20 @@
     S for stop
 */
 
+
+//TODO: setting of the target positions from control panel
+//TODO: implementing the sensors
+//TODO: e-stop implementation
+
 //* LIBRARIES: ---------------------------------------------------------------------------------
 
 #include <Arduino.h>
+
+//* DEFINES: -----------------------------------------------------------------------------------
+
+// yes, i know, im a monster (:
+#define CW true
+#define CCW false
 
 //* PINS: --------------------------------------------------------------------------------------
 
@@ -39,9 +50,12 @@ int targetRailPosition[] = {1000, 1350, 1500, 1600, 2000, 2200, 2250, 2300, 2350
 //* OBJECTS: -----------------------------------------------------------------------------------
 
 
-//* FUNCTION PROTOTYPES: ----------------------------------------------------------------------
+//* FUNCTION PROTOTYPES: -----------------------------------------------------------------------
 
-void home(), moveToPosition(int targetPositionSelection), driveMotor(int stepsToTake, int direction);
+void home();
+void moveToPosition(int targetPositionSelection);
+void driveMotor(int stepsToTake, int driveSpeed); // driveSpeed is a dividor so the higher number the faster the motor speed
+void motorEnable(bool direction), motorDisable();
 
 //* MAIN CODE: ---------------------------------------------------------------------------------
 
@@ -79,44 +93,81 @@ void loop() {
     }
 }
 
+//* FUNCITON DEFINITIONS: ----------------------------------------------------------------------
+
+//* Homing the bridge:
+
 void home() {
-    digitalWrite(EN_PIN, HIGH);
-    digitalWrite(DIR, HIGH);
-    while (digitalRead(LIMIT_SW) == HIGH) {
+    motorEnable(CW);
+    while (digitalRead(LIMIT_SW) == HIGH) { // drive motor until it hits the limit switch
         digitalWrite(STEP, HIGH);
-        delayMicroseconds(1000);
+        delayMicroseconds(2000);
         digitalWrite(STEP, LOW);
-        delayMicroseconds(1000);
+        delayMicroseconds(2000);
+    }
+    motorDisable();
+
+    stepsFromHome = 0;
+
+    motorEnable(CCW);
+    driveMotor(100, 1); // drive the motor back 100 steps
+    motorDisable();
+
+    currentBridgePosition = -1;
+    // right now the bridge should be at the home position, which is 100 steps back from the limit switch
+    Serial.print('H'); // message to the control panel that the bridge is at the home position
+}
+
+//* Drive directin and steps to take:
+
+void moveToPosition(int targetPositionSelection) {
+    if (targetPositionSelection == currentBridgePosition) {
+        Serial.print('X'); // message to the control panel that the bridge is already at the target position
+    } else if (targetPositionSelection > currentBridgePosition) {
+        motorEnable(CCW);
+        driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, 2);
+        motorDisable();
+        currentBridgePosition = targetPositionSelection;
+        Serial.print('P');
+        Serial.print(currentBridgePosition);// message to the control panel that the bridge is at the target position
+    } else if (targetPositionSelection < currentBridgePosition) {
+        motorEnable(CW);
+        driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], 2);
+        motorDisable();
+        currentBridgePosition = targetPositionSelection;
+        Serial.print('P');
+        Serial.print(currentBridgePosition);// message to the control panel that the bridge is at the target position
+    }
+}
+
+//* Driving the motor and setting the speed:
+
+void driveMotor(int stepsToTake, int driveSpeed) {
+    int stepTime = 2000 / driveSpeed;
+    int stepsTaken = 0;
+
+    while (stepsTaken != stepsToTake) {
+        digitalWrite(STEP, HIGH);
+        delayMicroseconds(stepTime);
+        digitalWrite(STEP, LOW);
+        delayMicroseconds(stepTime);
+        stepsTaken++;
+        (digitalRead(DIR) == HIGH) ? stepsFromHome-- : stepsFromHome++;
     }
     digitalWrite(STEP, LOW);
-    digitalWrite(EN_PIN, LOW);
-    currentBridgePosition = -1;
-    stepsFromHome = 0;
 }
 
-void moveToPosition(int targetPositionSelection) { // logic for direction and steps to take to reach the target position
-    if (currentBridgePosition < targetPositionSelection || currentBridgePosition > targetPositionSelection) {
-        if (currentBridgePosition < targetPositionSelection) {
-            driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, LOW);
-            currentBridgePosition++;
-        } else if (currentBridgePosition > targetPositionSelection) {
-            driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], HIGH);
-            currentBridgePosition--;
-        }
-    } else if (currentBridgePosition == targetPositionSelection) {
-        Serial.println("X"); // if the bridge is at the target position X for control panel
-    }
-}
+//* Enabling/Disabling the motor & setting the direction:
 
-void driveMotor(int stepsToTake, int direction) { // drive the motor a certain number of steps in a certain direction
+void motorEnable(bool direction) { // enable the motor and set the direction (true for CW, false for CCW)
     digitalWrite(EN_PIN, HIGH);
-    digitalWrite(DIR, direction);
-    for (int i = 0; i < stepsToTake; i++) {
-        digitalWrite(STEP, HIGH);
-        delayMicroseconds(500);
-        digitalWrite(STEP, LOW);
-        delayMicroseconds(500);
-        stepsFromHome++;
-    }
+    digitalWrite(DIR, (direction) ? HIGH : LOW);
+}
+
+void motorDisable() { // disable the motor and make sure step pin is low
     digitalWrite(EN_PIN, LOW);
+    digitalWrite(DIR, LOW);
+    if (digitalRead(STEP) == HIGH) {
+        digitalWrite(STEP, LOW);
+    }
 }
