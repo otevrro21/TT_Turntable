@@ -45,7 +45,7 @@ const int STEP = 16;
 const int stepsPerRevolution = 3200; // steps per revolution of the stepper motor (200 * 16 for microstepping)
 int stepsFromHome = 0; // steps from the home position
 int currentBridgePosition = 0; // current position of the bridge (side A)
-int targetRailPosition[] = {1000, 1350, 1500, 1600, 2000, 2200, 2250, 2300, 2350}; // positions of the rails in steps from homing position
+int targetRailPosition[] = {951, 1235, 1387, 1529, 1911, 2169, 2293, 2409, 2560}; // positions of the rails in steps from homing position
 
 //* OBJECTS: -----------------------------------------------------------------------------------
 
