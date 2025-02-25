@@ -8,12 +8,16 @@
     P and a number from 0 to 8 for position
     X for alraedy at the target position
     S for stop
+
+    E for reseting program after estop
+    C for continuing after estop
 */
 
 
 //TODO: setting of the target positions from control panel
-//TODO: implementing the sensors
+//TODO: implementing the sensors (track DONE, bridge NOT DONE)
 //TODO: e-stop implementation
+//TODO: PLP
 
 //* LIBRARIES: ---------------------------------------------------------------------------------
 
@@ -42,13 +46,15 @@ const int STEP = 16;
 
 //! GLOBAL VARIABLES: --------------------------------------------------------------------------
 
+unsigned long bridgeSensorPreviousTime = 0; // for timer function
+
 const int stepsPerRevolution = 3200; // steps per revolution of the stepper motor (200 * 16 for microstepping)
 int stepsFromHome = 0; // steps from the home position
 int currentBridgePosition = 0; // current position of the bridge (side A)
-int targetRailPosition[] = {951, 1235, 1387, 1529, 1911, 2169, 2293, 2409, 2560}; // positions of the rails in steps from homing position
-
-//* OBJECTS: -----------------------------------------------------------------------------------
-
+int targetRailPosition[] = {951, 1235, 1387, 1529, 1911, 2169, 2293, 2409, 2560}; // positions of the rails
+bool bridgeInMotion = false; // for checking if the bridge is in motion and saving it to EEPROM for PLP purposes
+// bool trainOnBridge = false; // for checking if the train is on the bridge and saving it to EEPROM for PLP purposes
+bool autoPilotEnabled = false; // to not have X sent to the control panel when track sensor gets triggered more than once
 
 //* FUNCTION PROTOTYPES: -----------------------------------------------------------------------
 
@@ -56,6 +62,7 @@ void home();
 void moveToPosition(int targetPositionSelection);
 void driveMotor(int stepsToTake, int driveSpeed); // driveSpeed is a dividor so the higher number the faster the motor speed
 void motorEnable(bool direction), motorDisable();
+void estop(int stepsTaken, int stepsToTake);
 
 //* MAIN CODE: ---------------------------------------------------------------------------------
 
@@ -75,11 +82,12 @@ void setup() {
 }
 
 void loop() {
+    // Listening for incoming commands from the control panel
     if (Serial.available() > 0) {
         char command = Serial.read();
-        if (command == 'H') {
+        if (command == 'H' && bridgeInMotion == false && autoPilotEnabled == false) {
             home();
-        } else if (command == 'P') {
+        } else if (command == 'P' && bridgeInMotion == false && autoPilotEnabled == false) {
             // Wait for the second character
             delay(10); // Small delay to ensure next character arrives (im so sorry)
             if (Serial.available() > 0) {
@@ -89,6 +97,16 @@ void loop() {
                     moveToPosition(pos);
                 }
             }
+        } else if (command == 'S') {
+            estop(NULL, NULL);
+        }
+    }
+    // Automatic turning to track 1 if a train is detected
+    if (digitalRead(TRACK_SENS_1) == LOW && bridgeInMotion == false) {
+        if (bridgeInMotion == false) {
+            autoPilotEnabled = true;
+            moveToPosition(0);
+            autoPilotEnabled = false;
         }
     }
 }
@@ -110,7 +128,7 @@ void home() {
     stepsFromHome = 0;
 
     motorEnable(CCW);
-    driveMotor(100, 1); // drive the motor back 100 steps
+    driveMotor(100, 2); // drive the motor back 100 steps
     motorDisable();
 
     currentBridgePosition = -1;
@@ -118,21 +136,21 @@ void home() {
     Serial.print('H'); // message to the control panel that the bridge is at the home position
 }
 
-//* Drive directin and steps to take:
+//* Drive direction and steps to take:
 
 void moveToPosition(int targetPositionSelection) {
-    if (targetPositionSelection == currentBridgePosition) {
+    if (targetPositionSelection == currentBridgePosition && autoPilotEnabled == false) {
         Serial.print('X'); // message to the control panel that the bridge is already at the target position
     } else if (targetPositionSelection > currentBridgePosition) {
         motorEnable(CCW);
-        driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, 2);
+        driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, 4); //! slow down after testing
         motorDisable();
         currentBridgePosition = targetPositionSelection;
         Serial.print('P');
         Serial.print(currentBridgePosition);// message to the control panel that the bridge is at the target position
     } else if (targetPositionSelection < currentBridgePosition) {
         motorEnable(CW);
-        driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], 2);
+        driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], 4); //! slow down after testing
         motorDisable();
         currentBridgePosition = targetPositionSelection;
         Serial.print('P');
@@ -143,8 +161,10 @@ void moveToPosition(int targetPositionSelection) {
 //* Driving the motor and setting the speed:
 
 void driveMotor(int stepsToTake, int driveSpeed) {
-    int stepTime = 2000 / driveSpeed;
+    int stepTime = 4000 / driveSpeed;
     int stepsTaken = 0;
+
+    bridgeInMotion = true;
 
     while (stepsTaken != stepsToTake) {
         digitalWrite(STEP, HIGH);
@@ -153,8 +173,14 @@ void driveMotor(int stepsToTake, int driveSpeed) {
         delayMicroseconds(stepTime);
         stepsTaken++;
         (digitalRead(DIR) == HIGH) ? stepsFromHome-- : stepsFromHome++;
+        if (Serial.read() == 'S') {
+            estop(stepsTaken, stepsToTake);
+            break;
+        }
     }
     digitalWrite(STEP, LOW);
+
+    bridgeInMotion = false;
 }
 
 //* Enabling/Disabling the motor & setting the direction:
@@ -169,5 +195,32 @@ void motorDisable() { // disable the motor and make sure step pin is low
     digitalWrite(DIR, LOW);
     if (digitalRead(STEP) == HIGH) {
         digitalWrite(STEP, LOW);
+    }
+}
+
+//* Logic for E-Stop
+
+void estop(int stepsTaken, int stepsToTake) {
+    digitalWrite(EN_PIN, LOW);
+    digitalWrite(STEP, LOW);
+    Serial.print('S'); // message to the control panel that the bridge is stopped
+    while (Serial.available() == 0) {
+        // do nothing until the control panel sends a command
+    }
+    char afterStopCommand = Serial.read();
+    if (afterStopCommand == 'C') {
+        if (bridgeInMotion == true) {
+            if (digitalRead(DIR) == HIGH) {
+                motorEnable(CW);
+                driveMotor(stepsToTake - stepsTaken, 4); //! slow down after testing
+                motorDisable();
+            } else {
+                motorEnable(CCW);
+                driveMotor(stepsToTake - stepsTaken, 4); //! slow down after testing
+                motorDisable();
+            }
+        }
+    } else if (afterStopCommand == 'E') {
+        home();
     }
 }
