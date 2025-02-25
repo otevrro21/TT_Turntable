@@ -213,12 +213,19 @@ void estop(int stepsTaken, int stepsToTake) {
             if (digitalRead(DIR) == HIGH) {
                 motorEnable(CW);
                 driveMotor(stepsToTake - stepsTaken, 4); //! slow down after testing
+                Serial.print('P');
+                Serial.print(currentBridgePosition);
                 motorDisable();
             } else {
                 motorEnable(CCW);
                 driveMotor(stepsToTake - stepsTaken, 4); //! slow down after testing
+                Serial.print('P');
+                Serial.print(currentBridgePosition);
                 motorDisable();
             }
+        } else if (bridgeInMotion == false) {
+            Serial.print('P');
+            Serial.print(currentBridgePosition);
         }
     } else if (afterStopCommand == 'E') {
         home();
