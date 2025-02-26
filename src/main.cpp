@@ -16,7 +16,6 @@
 
 //TODO: setting of the target positions from control panel
 //TODO: implementing the sensors (track DONE, bridge NOT DONE)
-//TODO: e-stop implementation
 //TODO: PLP
 
 //* LIBRARIES: ---------------------------------------------------------------------------------
@@ -117,7 +116,7 @@ void loop() {
 
 void home() {
     motorEnable(CW);
-    while (digitalRead(LIMIT_SW) == HIGH) { // drive motor until it hits the limit switch
+    while (digitalRead(LIMIT_SW) != LOW) { // drive motor until it hits the limit switch
         digitalWrite(STEP, HIGH);
         delayMicroseconds(2000);
         digitalWrite(STEP, LOW);
@@ -143,14 +142,14 @@ void moveToPosition(int targetPositionSelection) {
         Serial.print('X'); // message to the control panel that the bridge is already at the target position
     } else if (targetPositionSelection > currentBridgePosition) {
         motorEnable(CCW);
-        driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, 4); //! slow down after testing
+        driveMotor(targetRailPosition[targetPositionSelection] - stepsFromHome, 1);
         motorDisable();
         currentBridgePosition = targetPositionSelection;
         Serial.print('P');
         Serial.print(currentBridgePosition);// message to the control panel that the bridge is at the target position
     } else if (targetPositionSelection < currentBridgePosition) {
         motorEnable(CW);
-        driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], 4); //! slow down after testing
+        driveMotor(stepsFromHome - targetRailPosition[targetPositionSelection], 1);
         motorDisable();
         currentBridgePosition = targetPositionSelection;
         Serial.print('P');
@@ -212,13 +211,13 @@ void estop(int stepsTaken, int stepsToTake) {
         if (bridgeInMotion == true) {
             if (digitalRead(DIR) == HIGH) {
                 motorEnable(CW);
-                driveMotor(stepsToTake - stepsTaken, 4); //! slow down after testing
+                driveMotor(stepsToTake - stepsTaken, 1);
                 Serial.print('P');
                 Serial.print(currentBridgePosition);
                 motorDisable();
             } else {
                 motorEnable(CCW);
-                driveMotor(stepsToTake - stepsTaken, 4); //! slow down after testing
+                driveMotor(stepsToTake - stepsTaken, 1);
                 Serial.print('P');
                 Serial.print(currentBridgePosition);
                 motorDisable();
